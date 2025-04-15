@@ -1,0 +1,21 @@
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Random import get_random_bytes
+import hashlib
+
+def derive_key(passphrase):
+    return hashlib.sha256(passphrase.encode()).digest()
+
+def encrypt_data(data, passphrase):
+    key = derive_key(passphrase)
+    iv = get_random_bytes(16)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    ct = cipher.encrypt(pad(data, AES.block_size))
+    return iv + ct
+
+def decrypt_data(enc_data, passphrase):
+    key = derive_key(passphrase)
+    iv = enc_data[:16]
+    ct = enc_data[16:]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    return unpad(cipher.decrypt(ct), AES.block_size)

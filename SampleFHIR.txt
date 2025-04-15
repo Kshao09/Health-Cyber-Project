@@ -1,0 +1,11 @@
+{
+  "resourceType": "Patient",
+  "id": "example",
+  "name": [{
+    "use": "official",
+    "family": "Smith",
+    "given": ["Jane"]
+  }],
+  "gender": "female",
+  "birthDate": "1990-02-15"
+}

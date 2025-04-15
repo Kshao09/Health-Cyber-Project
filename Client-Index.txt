@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Secure Health Records</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+  <h2>Login / Register</h2>
+  <input id="username" placeholder="Username"><br>
+  <input id="password" type="password" placeholder="Password"><br>
+  <button onclick="register()">Register</button>
+  <button onclick="login()">Login</button>
+
+  <hr>
+
+  <h2>Upload FHIR Record</h2>
+  <input type="file" id="fileInput"><br>
+  <input id="key" placeholder="Encryption Key"><br>
+  <button onclick="upload()">Upload</button>
+
+  <hr>
+
+  <h2>Download Record</h2>
+  <input id="downloadUser" placeholder="Username to fetch"><br>
+  <input id="downloadKey" placeholder="Decryption Key"><br>
+  <button onclick="download()">Download</button>
+  <pre id="recordDisplay"></pre>
+
+<script>
+  const SERVER = "http://127.0.0.1:5000";
+
+  async function register() {
+    const username = usernameInput.value;
+    const password = passwordInput.value;
+    const res = await axios.post(`${SERVER}/register`, { username, password });
+    alert(res.data.message);
+  }
+
+  async function login() {
+    const username = usernameInput.value;
+    const password = passwordInput.value;
+    const res = await axios.post(`${SERVER}/login`, { username, password });
+    alert(res.data.message);
+  }
+
+  async function upload() {
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("username", usernameInput.value);
+    formData.append("key", key.value);
+    const res = await axios.post(`${SERVER}/upload`, formData);
+    alert(res.data.message);
+  }
+
+  async function download() {
+    const user = downloadUser.value;
+    const key = downloadKey.value;
+    const res = await axios.post(`${SERVER}/download/${user}`, { key });
+    if (res.data.record) {
+      recordDisplay.innerText = JSON.stringify(res.data.record, null, 2);
+    } else {
+      alert(res.data.error);
+    }
+  }
+</script>
+</body>
+</html>

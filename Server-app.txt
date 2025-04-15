@@ -1,0 +1,72 @@
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+import os, json
+from werkzeug.security import generate_password_hash, check_password_hash
+from crypto_utils import encrypt_data, decrypt_data
+
+app = Flask(__name__)
+CORS(app)
+
+USERS_DB = "users.json"
+RECORDS_DIR = "records/"
+os.makedirs(RECORDS_DIR, exist_ok=True)
+
+# Load or initialize user data
+if not os.path.exists(USERS_DB):
+    with open(USERS_DB, "w") as f:
+        json.dump({}, f)
+
+def load_users():
+    with open(USERS_DB, "r") as f:
+        return json.load(f)
+
+def save_users(data):
+    with open(USERS_DB, "w") as f:
+        json.dump(data, f)
+
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.json
+    users = load_users()
+    if data["username"] in users:
+        return jsonify({"error": "User exists"}), 400
+    users[data["username"]] = generate_password_hash(data["password"])
+    save_users(users)
+    return jsonify({"message": "Registered"}), 200
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.json
+    users = load_users()
+    if data["username"] not in users or not check_password_hash(users[data["username"]], data["password"]):
+        return jsonify({"error": "Invalid credentials"}), 401
+    return jsonify({"message": "Login successful"}), 200
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    file = request.files["file"]
+    username = request.form["username"]
+    key = request.form["key"]
+    data = file.read()
+    encrypted = encrypt_data(data, key)
+    path = f"{RECORDS_DIR}{username}_record.enc"
+    with open(path, "wb") as f:
+        f.write(encrypted)
+    return jsonify({"message": "Record uploaded"}), 200
+
+@app.route("/download/<username>", methods=["POST"])
+def download(username):
+    key = request.json["key"]
+    path = f"{RECORDS_DIR}{username}_record.enc"
+    if not os.path.exists(path):
+        return jsonify({"error": "No record found"}), 404
+    with open(path, "rb") as f:
+        encrypted = f.read()
+    try:
+        decrypted = decrypt_data(encrypted, key)
+        return jsonify({"record": json.loads(decrypted)}), 200
+    except:
+        return jsonify({"error": "Invalid key"}), 403
+
+if __name__ == "__main__":
+    app.run(debug=True)
