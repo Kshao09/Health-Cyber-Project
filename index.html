@@ -1,0 +1,444 @@
+<!-- Archivo completo: Secure Health Records actualizado -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Secure Health Records</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
+    <style>
+      #app-section {
+        display: none;
+      }
+      .page-section {
+        display: none;
+      }
+      pre {
+        background-color: #f8f9fa;
+        padding: 10px;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body class="bg-light">
+    <div class="container py-4">
+      <div class="text-center mb-4"><h2>Secure Health Records</h2></div>
+
+      <div id="auth-section" class="card mb-4">
+        <div class="card-header">Login or Register</div>
+        <div class="card-body">
+          <input
+            id="usernameInput"
+            class="form-control mb-2"
+            placeholder="Username"
+          />
+          <input
+            id="passwordInput"
+            type="password"
+            class="form-control mb-2"
+            placeholder="Password"
+          />
+          <button class="btn btn-primary me-2" onclick="register()">
+            Register
+          </button>
+          <button class="btn btn-success" onclick="login()">Login</button>
+        </div>
+      </div>
+
+      <div id="app-section">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span
+            ><strong>Logged in as:</strong> <span id="currentUser"></span
+          ></span>
+          <button class="btn btn-outline-danger btn-sm" onclick="logout()">
+            Logout
+          </button>
+        </div>
+
+        <ul class="nav nav-tabs mb-3">
+          <li class="nav-item">
+            <a class="nav-link active" onclick="showSection('upload', event)"
+              >Upload</a
+            >
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" onclick="showSection('share', event)">Share</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" onclick="showSection('mydocs', event)"
+              >My Documents</a
+            >
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" onclick="showSection('logs', event)">Logs</a>
+          </li>
+        </ul>
+
+        <div id="upload" class="page-section">
+          <div class="card">
+            <div class="card-header">Upload FHIR Record</div>
+            <div class="card-body">
+              <input type="file" id="fileInput" class="form-control mb-2" />
+              <input
+                id="note"
+                class="form-control mb-2"
+                placeholder="Note (optional)"
+              />
+              <div class="input-group mb-2">
+                <input
+                  id="key"
+                  class="form-control"
+                  placeholder="Encryption Key"
+                />
+                <button
+                  class="btn btn-outline-secondary"
+                  onclick="generateKey()"
+                >
+                  Generate
+                </button>
+              </div>
+              <button class="btn btn-primary" onclick="upload()">
+                Encrypt & Upload
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="share" class="page-section">
+          <div class="card">
+            <div class="card-header">Share a Document</div>
+            <div class="card-body">
+              <select id="docSelect" class="form-select mb-2"></select>
+              <select id="userSelect" class="form-select mb-2"></select>
+              <button class="btn btn-secondary" onclick="share()">Share</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="mydocs" class="page-section">
+          <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+              My Uploaded Documents
+            </div>
+            <div class="card-body">
+              <ul id="myDocsList" class="list-group"></ul>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header bg-warning">Documents Shared With Me</div>
+            <div class="card-body">
+              <ul id="sharedDocsList" class="list-group"></ul>
+            </div>
+          </div>
+        </div>
+
+        <div id="logs" class="page-section">
+          <div class="card">
+            <div class="card-header">Activity Logs</div>
+            <div class="card-body">
+              <ul id="logList" class="list-group"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const SERVER = "http://localhost:5000";
+
+      function showSection(id, event = null) {
+        if (id === "logs") loadLogs();
+        document
+          .querySelectorAll(".page-section")
+          .forEach((s) => (s.style.display = "none"));
+        const section = document.getElementById(id);
+        if (section) section.style.display = "block";
+        document
+          .querySelectorAll(".nav-link")
+          .forEach((tab) => tab.classList.remove("active"));
+        if (event) event.target.classList.add("active");
+        if (id === "share") loadShareData();
+        if (id === "mydocs") loadMyDocs();
+      }
+
+      function showApp(username) {
+        document.getElementById("auth-section").style.display = "none";
+        document.getElementById("app-section").style.display = "block";
+        document.getElementById("currentUser").innerText = username;
+        showSection("upload");
+      }
+
+      function logout() {
+        localStorage.removeItem("username");
+        localStorage.removeItem("token");
+        location.reload();
+      }
+
+      async function register() {
+        const username = usernameInput.value;
+        const password = passwordInput.value;
+        const res = await axios.post(`${SERVER}/register`, {
+          username,
+          password,
+        });
+        alert(res.data.message || res.data.error);
+        if (res.data.message) login();
+      }
+
+      async function login() {
+        const username = usernameInput.value;
+        const password = passwordInput.value;
+
+        try {
+          const res = await axios.post(`${SERVER}/login`, {
+            username,
+            password,
+          });
+          if (res.data.token) {
+            localStorage.setItem("token", res.data.token);
+            localStorage.setItem("username", username);
+            showApp(username);
+          } else {
+            alert(res.data.error || "Login failed");
+          }
+        } catch (err) {
+          alert("Login error: " + (err.response?.data?.error || err.message));
+        }
+      }
+
+      function encryptAESBinary(arrayBuffer, password) {
+        const salt = CryptoJS.lib.WordArray.random(16);
+        const iv = CryptoJS.lib.WordArray.random(16);
+        const key = CryptoJS.PBKDF2(password, salt, {
+          keySize: 256 / 32,
+          iterations: 1000,
+        });
+        const wordArray = CryptoJS.lib.WordArray.create(
+          new Uint8Array(arrayBuffer)
+        );
+        const encrypted = CryptoJS.AES.encrypt(wordArray, key, { iv });
+        const combined = CryptoJS.lib.WordArray.create(
+          salt.words.concat(iv.words).concat(encrypted.ciphertext.words),
+          salt.sigBytes + iv.sigBytes + encrypted.ciphertext.sigBytes
+        );
+        return CryptoJS.enc.Base64.stringify(combined);
+      }
+
+      function decryptAESBinary(base64String, password) {
+        const combined = CryptoJS.enc.Base64.parse(base64String);
+        const bytes = new Uint8Array(combined.sigBytes);
+        for (let i = 0; i < combined.sigBytes; i++) {
+          bytes[i] = (combined.words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+        }
+        const salt = CryptoJS.lib.WordArray.create(bytes.slice(0, 16));
+        const iv = CryptoJS.lib.WordArray.create(bytes.slice(16, 32));
+        const ciphertext = CryptoJS.lib.WordArray.create(bytes.slice(32));
+        const key = CryptoJS.PBKDF2(password, salt, {
+          keySize: 256 / 32,
+          iterations: 1000,
+        });
+        const decrypted = CryptoJS.AES.decrypt({ ciphertext }, key, {
+          iv,
+          mode: CryptoJS.mode.CBC,
+          padding: CryptoJS.pad.Pkcs7,
+        });
+        const result = new Uint8Array(decrypted.sigBytes);
+        for (let i = 0; i < decrypted.sigBytes; i++) {
+          result[i] = (decrypted.words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+        }
+        return result;
+      }
+
+      function getAuthHeaders() {
+        const token = localStorage.getItem("token");
+        return token ? { Authorization: "Bearer " + token } : {};
+      }
+      async function upload() {
+        const file = document.getElementById("fileInput").files[0];
+        const key = document.getElementById("key").value;
+        const note = document.getElementById("note")?.value || "";
+        const filename = file.name;
+        const reader = new FileReader();
+        reader.onload = async function () {
+          const raw = reader.result;
+          const encryptedBase64 = encryptAESBinary(raw, key);
+          const encryptedWordArray = CryptoJS.enc.Base64.parse(encryptedBase64);
+          const byteArray = new Uint8Array(encryptedWordArray.sigBytes);
+          for (let i = 0; i < encryptedWordArray.sigBytes; i++) {
+            byteArray[i] =
+              (encryptedWordArray.words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+          }
+          const blob = new Blob([byteArray], {
+            type: "application/octet-stream",
+          });
+          const formData = new FormData();
+          formData.append("file", blob);
+          formData.append("note", note);
+          formData.append("filename", filename);
+          try {
+            const res = await axios.post(`${SERVER}/upload`, formData, {
+              headers: getAuthHeaders(),
+            });
+            alert(res.data.message || res.data.error);
+          } catch (err) {
+            alert(
+              "Upload failed: " + (err.response?.data?.error || err.message)
+            );
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      async function loadShareData() {
+        const docs = await axios.get(`${SERVER}/mydocs`, {
+          Headers: getAuthHeaders(),
+        });
+        const users = await axios.get(`${SERVER}/users`, {
+          headers: getAuthHeaders(),
+        });
+        docSelect.innerHTML = docs.data.documents
+          .map(
+            (d) =>
+              `<option value="${d.file_path}">${
+                d.original_filename || d.file_path
+              } (${d.note || "No note"})</option>`
+          )
+          .join("");
+        userSelect.innerHTML = users.data.users
+          .map((u) => `<option value="${u}">${u}</option>`)
+          .join("");
+      }
+
+      async function share() {
+        const target = userSelect.value;
+        const record_path = docSelect.value;
+        try {
+          const res = await axios.post(
+            `${SERVER}/share`,
+            { target, record_path },
+            { headers: getAuthHeaders() }
+          );
+          alert(res.data.message || res.data.error);
+        } catch (err) {
+          alert("Share failed: " + (err.response?.data?.error || err.message));
+        }
+      }
+
+      async function loadMyDocs() {
+        const [ownRes, sharedRes] = await Promise.all([
+          axios.get(`${SERVER}/mydocs`, { headers: getAuthHeaders() }),
+          axios.get(`${SERVER}/shared-with-me`, { headers: getAuthHeaders() }),
+        ]);
+        myDocsList.innerHTML = ownRes.data.documents
+          .map(
+            (d) => `
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div><strong>${d.original_filename || d.file_path}</strong><br />
+            <small class="text-muted">${d.note || "No note"}</small></div>
+            <button class="btn btn-sm btn-outline-primary" onclick="downloadMyDoc('${
+              d.file_path
+            }')">Download</button>
+          </li>`
+          )
+          .join("");
+        sharedDocsList.innerHTML = sharedRes.data.documents
+          .map(
+            (d) => `
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div><strong>${d.original_filename || d.file_path}</strong><br />
+            <small class="text-muted">Shared by ${d.owner} — ${
+              d.note || "No note"
+            }</small></div>
+            <button class="btn btn-sm btn-outline-success" onclick="downloadSharedDoc('${
+              d.owner
+            }', '${d.file_path}')">Download</button>
+          </li>`
+          )
+          .join("");
+      }
+
+      async function downloadMyDoc(path) {
+        const key = prompt("Enter decryption key:");
+        if (!key) return;
+        const res = await axios.post(
+          `${SERVER}/download/${localStorage.getItem("username")}`,
+          { key },
+          { headers: getAuthHeaders() }
+        );
+        if (res.data.record) {
+          const data = decryptAESBinary(res.data.record, key);
+          const blob = new Blob([data], { type: "application/octet-stream" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = res.data.original_filename || "record.bin";
+          a.click();
+        } else {
+          alert(res.data.error || "Record not found");
+        }
+      }
+
+      async function downloadSharedDoc(owner, path) {
+        const key = prompt("Enter decryption key:");
+        if (!key) return;
+        const res = await axios.post(
+          `${SERVER}/download/${owner}`,
+          { key },
+          { headers: getAuthHeaders() }
+        );
+        if (res.data.record) {
+          const data = decryptAESBinary(res.data.record, key);
+          const blob = new Blob([data], { type: "application/octet-stream" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = res.data.original_filename || "record.bin";
+          a.click();
+        } else {
+          alert(res.data.error || "Record not found");
+        }
+      }
+
+      async function loadLogs() {
+        const res = await axios.get(`${SERVER}/logs`, {
+          headers: getAuthHeaders(),
+        });
+        const list = document.getElementById("logList");
+        if (list) {
+          list.innerHTML = res.data.logs
+            .map(
+              (log) =>
+                `<li class="list-group-item">
+                <strong>${log.action}</strong> → ${log.target || ""}
+                <span class="text-muted float-end">${new Date(
+                  log.timestamp
+                ).toLocaleString()}</span>
+              </li>`
+            )
+            .join("");
+        }
+      }
+
+      function generateKey(length = 32) {
+        const chars =
+          "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_-+=<>?";
+        let key = "";
+        for (let i = 0; i < length; i++) {
+          key += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        document.getElementById("key").value = key;
+      }
+
+      window.onload = () => {
+        const user = localStorage.getItem("username");
+        const token = localStorage.getItem("token");
+        if (user && token) {
+          showApp(user);
+        }
+      };
+    </script>
+  </body>
+</html>
