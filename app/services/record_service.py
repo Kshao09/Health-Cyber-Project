@@ -42,7 +42,7 @@ def share_with_user():
     db = get_db()
     cur = db.cursor()
 
-    # Obtener IDs necesarios
+    # Get Nessesary IDs
     cur.execute("SELECT id FROM users WHERE username = ?", (g.username,))
     owner_id = cur.fetchone()["id"]
 
@@ -52,7 +52,7 @@ def share_with_user():
         return jsonify({"error": "Target user not found"}), 404
     target_id = target["id"]
 
-    # Obtener ID del documento
+    # get record ID
     cur.execute("""
         SELECT id FROM records WHERE user_id = ? AND file_path = ?
     """, (owner_id, record_path))
@@ -61,7 +61,7 @@ def share_with_user():
         return jsonify({"error": "Document not found"}), 404
     record_id = record["id"]
 
-    # Verificar si ya fue compartido
+    # verify if already shared
     cur.execute("""
         SELECT 1 FROM shares
         WHERE owner_id = ? AND shared_with_id = ? AND record_id = ?
@@ -69,7 +69,7 @@ def share_with_user():
     if cur.fetchone():
         return jsonify({"message": "Already shared"}), 200
 
-    # Insertar nuevo permiso de compartición
+    # insert share record
     cur.execute("""
         INSERT INTO shares (owner_id, shared_with_id, record_id)
         VALUES (?, ?, ?)
